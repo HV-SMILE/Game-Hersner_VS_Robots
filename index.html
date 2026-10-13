@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heroes VS Robots</title>
+
+  <!-- Manifest-ի կապումը -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <meta name="theme-color" content="#4a5d3a">
+
+  <!-- Style.css-ի կապումը -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Service Worker-ի գրանցումը -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker-ը հաջողությամբ գրանցվեց:', reg))
+          .catch(err => console.log('Service Worker-ի սխալ:', err));
+      });
+    }
+  </script>
+</head>
+<body>
+
+  <h1>Heroes VS Robots</h1>
+
+  <!-- Մուտքի էկրան (Login) -->
+  <div id="loginScreen">
+    <h2>Բարի գալուստ</h2>
+    <div class="tip" style="text-align:center; max-width:360px; margin-bottom:14px;">
+      Մուտքագրիր քո խաղացողի անունը։ Այն օգտագործվում է միայն այս սարքի վրա քո առաջընթացը (🏆, բացված քարտեզներ ու հերոսներ) պահելու համար։
+    </div>
+    <input id="loginUsername" type="text" placeholder="Օգտանուն" maxlength="24" autocomplete="username">
+    <input id="loginPassword" type="password" placeholder="Գաղտնաբառ" maxlength="64" autocomplete="current-password" style="margin-top:8px;">
+    <button id="loginBtn" class="action loginConfirmBtn" style="margin-top:12px;">Մուտք</button>
+  </div>
+
+  <div id="wrap" style="display:none;">
+    <canvas id="gameCanvas" width="720" height="480"></canvas>
+
+    <div id="panel">
+      <div class="stats">
+        <div>Կյանքեր: <span id="hearts" class="val">20</span></div>
+        <div>Ոսկի: <span id="gold" class="val">100</span></div>
+      </div>
+
+      <div class="stats">
+        <div>Մակարդակ: <span id="wave" class="val">0/100</span></div>
+        <div>🏆 <span class="val coinBalance">0</span></div>
+      </div>
+
+      <div class="stats">
+        <div>Քարտեզ: <span id="mapBadge" class="val">🌾 Գյուղական Ճամփա</span></div>
+      </div>
+
+      <div id="btnRow">
+        <button id="startBtn" class="action">Սկսել ալիքը</button>
+        <button id="speedBtn" class="action">⏩ x1</button>
+      </div>
+
+      <div id="btnRow2">
+        <button id="pauseBtn" class="action">⏸</button>
+        <button id="inGameMenuBtn" class="action">🏠 Մենյու</button>
+        <button id="inGameAutoLevelBtn" class="action autoLevelGameBtn" style="display:none;">⚡ AutoLv</button>
+        <button id="adminInfoGameBtn" class="action adminInfoBtn" style="display:none;">🔴 ADMIN • Info</button>
+        <button id="creatorInfoGameBtn" class="action creatorInfoBtn" style="display:none;">🟣 CREATOR • Control</button>
+      </div>
+
+      <div class="selInfo" id="selInfo">
+        Ընտրիր հերոսի, հետո սեղմիր դաշտում՝ տեղադրելու համար
+      </div>
+
+      <div id="towerPanel" class="towerPanel" style="display:none;"></div>
+      <div id="wavePreview" class="tip wavePreview"></div>
+
+      <div class="heroCarousel">
+        <button class="carouselArrow" id="heroPrev">‹</button>
+        <div class="heroGrid" id="heroGrid"></div>
+        <button class="carouselArrow" id="heroNext">›</button>
+      </div>
+      <div class="heroDots" id="heroDots"></div>
+
+      <div class="tip">
+        Խորհուրդ. Հերոսներին կարող ես տեղադրել ցանկացած ազատ (ոչ ուղու) վանդակում:<br>⌨ Space՝ սկսել ալիքը · 1–4՝ հերոս · P՝ դադար · F՝ արագություն · Esc՝ չեղարկել · հերոսի վրա սեղմիր՝ վաճառելու համար (70%)
+      </div>
+
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <!-- Սկզբնական էկրան (Start Screen) -->
+  <div id="startScreen" style="display:none;">
+    <button id="settingsBtn" class="cornerIconBtn" aria-label="Settings" title="Settings">⚙</button>
+    <h2>Heroes VS Robots</h2>
+    <div class="tip" style="text-align:center;">🏆 <span class="val coinBalance">0</span></div>
+
+    <div class="chooseSection">
+      <div class="chooseLabel">Ընտրիր դժվարությունը (ազդում է ստացվող 🏆-ի քանակի վրա)</div>
+      <div class="choiceGrid" id="diffGrid"></div>
+    </div>
+
+    <div class="chooseSection">
+      <div class="chooseLabel">Ընտրիր քարտեզը (կողպվածները գնվում են 🏆-ով)</div>
+      <div class="choiceGrid" id="mapGrid"></div>
+    </div>
+
+    <div class="tip" style="text-align:center; margin-top:6px;">
+      Ամեն քարտեզ ունի 100 մակարդակ։ Ամեն անցած մակարդակ 🏆 է տալիս (ավելի ուշ քարտեզները՝ ավելի շատ), որով կարող ես գնել նոր քարտեզներ ու հերոսներ, կամ բարձրացնել հերոսների մակարդակը։
+    </div>
+
+    <div id="startBtnRow" style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; justify-content:center;">
+      <button id="playBtn" class="action" disabled>Խաղալ</button>
+      <button id="heroesInfoBtn" class="action" style="background:linear-gradient(180deg,#5c8ae8,#2a4a8a); border-color:#8ab0f0;">🛒 Հերոսների խանութ</button>
+      <button id="robotsInfoBtn" class="action" style="background:linear-gradient(180deg,#9a5cd9,#4a2a8a); border-color:#c9a0ff;">🤖 Ռոբոտների ցանկ</button>
+      <button id="leaderboardBtn" class="action" style="background:linear-gradient(180deg,#e8c95c,#8a6a1a); border-color:#f0e0a0;">🏆 Առաջատարներ</button>
+      <button id="randomDrawBtn" class="action randomDrawMenuBtn">🎁 Պատահական գնում <span id="drawKeyBadge">1 🔑</span></button>
+      <button id="promoListBtn" class="action" style="display:none;">🔐 Պրոմոկոդեր • CREATOR</button>
+      <button id="dailyBtn" class="action">🎁 Ամենօրյա նվերներ</button>
+      <button id="featureHubBtn" class="action featureHubMenuBtn">⚡ Progress & Features</button>
+      <button id="adminInfoBtn" class="action adminInfoBtn" style="display:none;">🔴 ADMIN • Խաղի Info</button>
+      <button id="creatorInfoBtn" class="action creatorInfoBtn" style="display:none;">🟣 CREATOR • Control Center</button>
+    </div>
+  </div>
+
+  <!-- Հերոսների խանութ/ցանկ (անուն, զենք, ունակություն, գնում/բարձրացում) -->
+  <div id="heroesInfoOverlay">
+    <h2>🛒 Հերոսների խանութ</h2>
+    <div class="tip">🏆 <span class="val coinBalance">0</span></div>
+    <div id="heroesInfoList"></div>
+    <button id="heroesInfoCloseBtn" class="action">Փակել</button>
+  </div>
+
+  <!-- Ռոբոտների ցանկ (միայն տեղեկատվական) -->
+  <div id="robotsInfoOverlay">
+    <h2>🤖 Ռոբոտների ցանկ</h2>
+    <div id="robotsInfoList"></div>
+    <button id="robotsInfoCloseBtn" class="action">Փակել</button>
+  </div>
+
+  <!-- Խաղացողների ցանկ, ըստ գավաթների -->
+  <div id="leaderboardOverlay">
+    <h2>🏆 Առաջատարներ</h2>
+    <div id="leaderboardList"></div>
+    <button id="leaderboardCloseBtn" class="action">Փակել</button>
+  </div>
+
+  <div id="promoOverlay" class="simpleOverlay" style="display:none">
+    <div class="simpleBox">
+      <h2>🔐 Պրոմոկոդեր</h2>
+      <div class="tip">Յուրաքանչյուր կոդ կարող է օգտագործվել 7 օրը մեկ։</div>
+      <div class="promoRow"><input id="promoCodeInput" type="text" maxlength="120" placeholder="Մուտքագրիր պրոմոկոդը" autocomplete="off"><button id="promoCodeBtn" class="action">Ակտիվացնել</button></div>
+      <div id="promoCodeResult" class="promoResult"></div>
+      <button id="promoCloseBtn" class="action">Փակել</button>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="simpleOverlay" style="display:none">
+    <div class="simpleBox">
+      <h2>⚙️ Settings</h2>
+      <label>Լեզու <select id="languageSelect">
+        <option value="hy">Հայերեն</option><option value="en">English</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="ar">العربية</option><option value="tr">Türkçe</option><option value="ka">ქართული</option><option value="uk">Українська</option><option value="pl">Polski</option><option value="zh">中文</option><option value="ja">日本語</option>
+      </select></label>
+      <button id="settingsCloseBtn" class="action">Փակել</button>
+    </div>
+  </div>
+
+  <div id="dailyOverlay" class="simpleOverlay" style="display:none">
+    <div class="simpleBox"><h2>🎁 Ամենօրյա նվերներ</h2><div class="dailyRewardGrid"><div class="dailyRewardCard"><b>Օր 1</b><span>+5 🏆</span></div><div class="dailyRewardCard"><b>Օր 2</b><span>+10 🏆</span></div><div class="dailyRewardCard"><b>Օր 3</b><span>+15 🏆</span></div><div class="dailyRewardCard"><b>Օր 4</b><span>+20 🏆</span></div><div class="dailyRewardCard"><b>Օր 5</b><span>+25 🏆</span></div><div class="dailyRewardCard"><b>Օր 6</b><span>+30 🏆</span></div><div class="dailyRewardCard"><b>Օր 7</b><span>+35 🏆</span></div><div class="dailyRewardCard"><b>Օր 8</b><span>+40 🏆</span></div><div class="dailyRewardCard"><b>Օր 9</b><span>+45 🏆</span></div><div class="dailyRewardCard"><b>Օր 10</b><span>+50 🏆</span></div><div class="dailyRewardCard"><b>Օր 11</b><span>+55 🏆</span></div><div class="dailyRewardCard"><b>Օր 12</b><span>+60 🏆</span></div><div class="dailyRewardCard"><b>Օր 13</b><span>+65 🏆</span></div><div class="dailyRewardCard"><b>Օր 14</b><span>+70 🏆</span></div><div class="dailyRewardCard"><b>Օր 15</b><span>+75 🏆</span></div><div class="dailyRewardCard"><b>Օր 16</b><span>+80 🏆</span></div><div class="dailyRewardCard"><b>Օր 17</b><span>+85 🏆</span></div><div class="dailyRewardCard"><b>Օր 18</b><span>+90 🏆</span></div><div class="dailyRewardCard"><b>Օր 19</b><span>+95 🏆</span></div><div class="dailyRewardCard"><b>Օր 20</b><span>+100 🏆</span></div><div class="dailyRewardCard"><b>Օր 21</b><span>+105 🏆</span></div><div class="dailyRewardCard"><b>Օր 22</b><span>+110 🏆</span></div><div class="dailyRewardCard"><b>Օր 23</b><span>+115 🏆</span></div><div class="dailyRewardCard"><b>Օր 24</b><span>+120 🏆</span></div><div class="dailyRewardCard"><b>Օր 25</b><span>+125 🏆</span></div><div class="dailyRewardCard"><b>Օր 26</b><span>+130 🏆</span></div><div class="dailyRewardCard"><b>Օր 27</b><span>+135 🏆</span></div><div class="dailyRewardCard"><b>Օր 28</b><span>+140 🏆</span></div><div class="dailyRewardCard"><b>Օր 29</b><span>+145 🏆</span></div><div class="dailyRewardCard"><b>Օր 30</b><span>+150 🏆</span></div></div><button id="dailyCloseBtn" class="action">Փակել</button></div>
+  </div>
+
+  <!-- Պատահական գնում -->
+  <div id="randomDrawOverlay" class="simpleOverlay" style="display:none">
+    <div class="randomDrawBox">
+      <div class="randomDrawHeader">
+        <div>
+          <div class="randomDrawEyebrow">MYSTERY REWARD</div>
+          <h2>🎁 Պատահական գնում</h2>
+          <div class="randomDrawMeta">Մնացած բանալիներ՝ <b id="drawKeyCount">1</b> 🔑</div>
+        </div>
+      </div>
+      <div class="randomDrawChestWrap">
+        <div id="randomDrawChest" class="randomDrawChest" aria-hidden="true">
+          <div class="chestGlow"></div>
+          <div class="chestLid"></div>
+          <div class="chestBody"></div>
+          <div class="chestLock">✦</div>
+        </div>
+      </div>
+      <div id="randomDrawResult" class="randomDrawResult">Բացիր առեղծվածային արկղը և ստացիր 16 մրցանակներից մեկը։</div>
+      <div class="randomDrawHint">1 🔑 = 1 պատահական գնում • ընտրությունը կատարվում է նախկին անիվի հավանականությունների նորմալացված հարաբերությամբ։</div>
+      <div id="randomDrawPrizeGrid" class="randomDrawPrizeGrid"></div>
+      <div class="randomDrawActions">
+        <button id="randomDrawOpenBtn" class="action randomDrawOpenBtn">🎁 Բացել արկղը <span>• 1 🔑</span></button>
+        <button id="randomDrawCloseBtn" class="action">Փակել</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="creatorOverlay" style="display:none">
+    <div class="creatorBox">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><div class="creatorEyebrow">HEROES VS ROBOTS • CREATOR</div><h2 style="margin:.25rem 0">🟣 Creator Control Center</h2></div>
+        <button id="creatorCloseBtn" class="action">Փակել</button>
+      </div>
+      <div id="creatorContent"></div>
+    </div>
+  </div>
+
+  <div id="expansionOverlay" class="simpleOverlay" style="display:none">
+    <div class="expansionBox">
+      <div class="expansionHeader">
+        <div><div class="expEyebrow">HEROES VS ROBOTS • MEGA EXPANSION</div><h2>🎮 Game Center</h2></div>
+        <button id="expansionCloseBtn" class="action">Փակել</button>
+      </div>
+      <div class="expTabs">
+        <button class="expTab sel" data-tab="overview">🏠 Overview</button>
+        <button class="expTab" data-tab="battle">⚔️ Battle</button>
+        <button class="expTab" data-tab="heroes">🦸 Heroes</button>
+        <button class="expTab" data-tab="fields">🗺️ Fields</button>
+        <button class="expTab" data-tab="economy">💰 Economy</button>
+        <button class="expTab" data-tab="online">🌐 Online</button>
+        <button class="expTab" data-tab="progress">🏅 Progress</button>
+        <button class="expTab" data-tab="events">🎉 Events</button>
+        <button class="expTab" data-tab="info">📖 Info</button>
+      </div>
+      <div id="expansionContent"></div>
+    </div>
+  </div>
+
+  <div id="featureHubOverlay" class="simpleOverlay" style="display:none">
+    <div class="featureHubBox">
+      <div class="featureHubHead"><div><div class="randomDrawEyebrow">HEROES VS ROBOTS • EXPANSION</div><h2>⚡ Progress Center</h2></div><button id="featureHubCloseBtn" class="action">Փակել</button></div>
+      <div id="featureHubContent"></div>
+    </div>
+  </div>
+
+  <!-- Վերջնական էկրան (Game Over / Victory Overlay) -->
+  <div id="overlay">
+    <h2 id="overlayTitle">Խաղն ավարտվեց</h2>
+    <div id="overlayText" class="tip" style="font-size: 12px; margin-bottom: 14px;"></div>
+    <button id="restartBtn" class="action">🔁 Կրկին փորձել</button>
+    <button id="menuBtn" class="action">Գլխավոր մենյու</button>
+  </div>
+
+  <!-- Խաղի տրամաբանության JS ֆայլը -->
+  <!-- Firebase Realtime Database for the shared online leaderboard -->
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-database-compat.js"></script>
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+  <script src="features.js"></script>
+  <script src="expansion.js"></script>
+  <script src="creator.js"></script>
+  <script src="boxes.js"></script>
+</body>
+</html>
